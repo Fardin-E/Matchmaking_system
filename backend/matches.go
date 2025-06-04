@@ -34,7 +34,7 @@ func getSummonerNameByPuuid(puuid string) RiotAccount {
 func GetMatchInfo(puuid string) ([]Match, error) {
 	baseUrl := "https://americas.api.riotgames.com/lol/match/v5/matches/by-puuid"
 
-	joinedUrl := fmt.Sprintf("%s/%s/ids?start=0&count=20", baseUrl, puuid)
+	joinedUrl := fmt.Sprintf("%s/%s/ids?start=0&count=5", baseUrl, puuid)
 
 	body, err := getRequest(joinedUrl, getApiKey())
 	if err != nil {

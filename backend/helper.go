@@ -4,8 +4,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
+
+	"github.com/joho/godotenv"
 )
 
 func CreateJson(data interface{}) {
@@ -17,6 +20,11 @@ func CreateJson(data interface{}) {
 }
 
 func getApiKey() string {
+	err := godotenv.Load(".env")
+	if err != nil {
+		log.Fatal("Error loading .env file")
+	}
+
 	return os.Getenv("RIOT_API_KEY")
 }
 

@@ -18,10 +18,10 @@ func main() {
 	}
 	backend.CreateJson(info)
 
-	matchList, err := backend.GetMatchInfo(info.Puuid)
-	if err != nil {
-		fmt.Println("Unable to get match list", err)
-	}
+	// matchList, err := backend.GetMatchInfo(info.Puuid)
+	// if err != nil {
+	// 	fmt.Println("Unable to get match list", err)
+	// }
 
-	backend.CreateJson(matchList)
+	// backend.CreateJson(matchList)
 }
