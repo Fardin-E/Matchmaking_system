@@ -24,4 +24,14 @@ func main() {
 	// }
 
 	// backend.CreateJson(matchList)
+	p := &backend.Player{}
+
+	players, err := p.GetPlayers()
+	if err != nil {
+		return
+	}
+	for _, i := range players {
+		fmt.Printf("Player: %s: (%s %s) - LP: %d\n",
+			i.Puuid, i.Tier, i.Rank, i.LeaguePoints)
+	}
 }
