@@ -82,7 +82,12 @@ func (p *Player) GetPlayers(api *RiotApi, account *RiotAccount) Result[[]Player]
 
 		for _, entry := range leagueEntries {
 			tierMatch := strings.EqualFold(entry.Tier, rankInfo.Tier)
-			rankMatch := strings.EqualFold(entry.Rank, rankInfo.Rank)
+
+			rankMatch := true
+			if !IsHighElo(entry.Tier) {
+				rankMatch = strings.EqualFold(entry.Rank, rankInfo.Rank)
+			}
+
 			queueMatch := entry.QueueType == rankInfo.QueueType
 
 			if tierMatch && rankMatch && queueMatch {
@@ -112,4 +117,9 @@ func (p *Player) PrintPlayers(players []Player) {
 		return
 	}
 	fmt.Println(string(jsonData))
+}
+
+func IsHighElo(tier string) bool {
+	tier = strings.ToUpper(tier)
+	return tier == "MASTER" || tier == "GRANDMASTER" || tier == "CHALLENGER"
 }
