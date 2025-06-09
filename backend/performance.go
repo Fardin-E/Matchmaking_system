@@ -19,7 +19,7 @@ type LeagueEntry struct {
 	// Add other fields if needed
 }
 
-func (p *Player) computeRankScores() {
+func GetRankScore(tier string, division string, lp int) int {
 	tierScores := map[string]int{
 		"IRON":        0,
 		"BRONZE":      2,
@@ -40,11 +40,15 @@ func (p *Player) computeRankScores() {
 		"I":   30,
 	}
 
+	tierScore := tierScores[strings.ToUpper(tier)]
+	divisionScore := divisionScores[strings.ToUpper(division)]
+
+	return tierScore*100 + divisionScore*50 + lp
+}
+
+func (p *Player) computeRankScores() {
 	for i, rank := range p.RankType {
-		tierScore := tierScores[strings.ToUpper(rank.Tier)]
-		divisionScore := divisionScores[strings.ToUpper(rank.Rank)]
-		score := tierScore*100 + divisionScore*50 + rank.LeaguePoints
-		p.RankType[i].RankScore = score
+		p.RankType[i].RankScore = GetRankScore(rank.Tier, rank.Rank, rank.LeaguePoints)
 	}
 }
 
@@ -90,7 +94,7 @@ func (p *Player) GetPlayers(api *RiotApi, account *RiotAccount) Result[[]Player]
 							Rank:         entry.Rank,
 							LeaguePoints: entry.LeaguePoints,
 							QueueType:    entry.QueueType,
-							RankScore:    0,
+							RankScore:    GetRankScore(entry.Tier, entry.Rank, entry.LeaguePoints),
 						},
 					},
 				}
