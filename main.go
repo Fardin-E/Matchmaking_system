@@ -2,36 +2,48 @@ package main
 
 import (
 	"fmt"
+	"strings"
+	"unicode"
 
 	"github.com/Fardin-E/Winrate_calculator/backend"
 )
 
-type MatchList struct {
-	MatchID []string `json:"match_ids"`
+func removeAllWhitespace(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		if !unicode.IsSpace(r) {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
 }
 
 func main() {
-	info, err := backend.GetSummonerInfoByName("Dong awabuki", "FISH")
-	if err != nil {
-		fmt.Println("Error: ", err)
+	api := backend.NewRiotApi()
+
+	gameName := "sit ye"
+	tagName := "NA1"
+	cacheFile := fmt.Sprintf("cache/%s_%s.json", strings.ToLower(removeAllWhitespace(gameName)), strings.ToLower(tagName))
+
+	r := &backend.RiotAccount{}
+
+	// Fetch summoner info first
+	infoResult := r.GetSummonerInfoByName(api, gameName, tagName, cacheFile)
+	if infoResult.Err != nil {
+		fmt.Println("Error getting summoner info:", infoResult.Err)
 		return
 	}
-	backend.CreateJson(info)
+	fmt.Println("✅ Summoner info fetched")
 
-	// matchList, err := backend.GetMatchInfo(info.Puuid)
-	// if err != nil {
-	// 	fmt.Println("Unable to get match list", err)
-	// }
-
-	// backend.CreateJson(matchList)
-	p := &backend.Player{}
-
-	players, err := p.GetPlayers()
-	if err != nil {
+	// Fetch players of similar rank
+	p := &infoResult.Data.Player
+	playersResult := p.GetPlayers(api, &infoResult.Data)
+	if playersResult.Err != nil {
+		fmt.Println("Error getting players:", playersResult.Err)
 		return
 	}
-	for _, i := range players {
-		fmt.Printf("Player: %s: (%s %s) - LP: %d\n",
-			i.Puuid, i.Tier, i.Rank, i.LeaguePoints)
-	}
+	fmt.Println("✅ Similar players fetched")
+
+	// Print them
+	p.PrintPlayers(playersResult.Data)
 }
