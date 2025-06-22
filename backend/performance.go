@@ -8,8 +8,7 @@ import (
 
 // Add this struct to match the API response
 type LeagueEntry struct {
-	SummonerId   string `json:"summonerId"`
-	SummonerName string `json:"summonerName"`
+	Puuid        string `json:"puuid"`
 	LeaguePoints int    `json:"leaguePoints"`
 	Rank         string `json:"rank"`
 	Tier         string `json:"tier"`
@@ -46,15 +45,12 @@ func GetRankScore(tier string, division string, lp int) int {
 	return tierScore*100 + divisionScore*50 + lp
 }
 
-func (p *Player) computeRankScores() {
-	for i, rank := range p.RankType {
-		p.RankType[i].RankScore = GetRankScore(rank.Tier, rank.Rank, rank.LeaguePoints)
-	}
-}
-
-func (p *Player) ConstructUrl(rank string, division string, queueType string, page int) string {
+func constructUrlAllEntry(rank string, division string, page int) string {
 	rank = strings.ToUpper(rank)
 	division = strings.ToUpper(division)
+
+	// Hardcoding queue type
+	var queueType = "RANKED_SOLO_5x5"
 
 	// MASTER, GRANDMASTER, CHALLENGER have no division
 	if rank == "MASTER" || rank == "GRANDMASTER" || rank == "CHALLENGER" {
@@ -64,11 +60,17 @@ func (p *Player) ConstructUrl(rank string, division string, queueType string, pa
 	return fmt.Sprintf("https://na1.api.riotgames.com/lol/league/v4/entries/%s/%s/%s?page=%d", queueType, rank, division, page)
 }
 
-func (p *Player) GetPlayers(api *RiotApi, account *RiotAccount) Result[[]Player] {
+func (p *Player) computeRankScores() {
+	for i, rank := range p.RankType {
+		p.RankType[i].RankScore = GetRankScore(rank.Tier, rank.Rank, rank.LeaguePoints)
+	}
+}
+
+func (p *Player) GetPlayers(api *RiotApi, account *Player) Result[[]Player] {
 	var matchedPlayers []Player
 
-	for _, rankInfo := range account.Player.RankType {
-		url := p.ConstructUrl(rankInfo.Tier, rankInfo.Rank, rankInfo.QueueType, 1)
+	for _, rankInfo := range account.RankType {
+		url := constructUrlAllEntry(rankInfo.Tier, rankInfo.Rank, 1)
 		body, err := api.getRequestWithRetry(url, api.apiKey)
 		if err != nil {
 			return Result[[]Player]{Err: err}
@@ -92,7 +94,7 @@ func (p *Player) GetPlayers(api *RiotApi, account *RiotAccount) Result[[]Player]
 
 			if tierMatch && rankMatch && queueMatch {
 				player := Player{
-					Puuid: entry.SummonerId, // Use summonerId instead of PUUID for now
+					Puuid: entry.Puuid,
 					RankType: []RankInfo{
 						{
 							Tier:         entry.Tier,

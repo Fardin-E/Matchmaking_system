@@ -16,18 +16,15 @@ type RankInfo struct {
 	RankScore    int
 }
 
+// going to combine these two structs
 type Player struct {
 	Puuid    string     `json:"puuid"`
+	GameName string     `json:"gameName"`
+	TagLine  string     `json:"tagLine"`
 	RankType []RankInfo `json:"ranks"`
 }
 
-type RiotAccount struct {
-	Player   Player
-	GameName string `json:"gameName"`
-	TagName  string `json:"tagLine"`
-}
-
-func (r *RiotAccount) checkInfoAvailable(path string) (bool, error) {
+func (p *Player) checkInfoAvailable(path string) (bool, error) {
 	if _, err := os.Stat(path); err == nil {
 		return true, nil
 	} else if errors.Is(err, os.ErrNotExist) {
@@ -37,87 +34,117 @@ func (r *RiotAccount) checkInfoAvailable(path string) (bool, error) {
 	}
 }
 
-func (r *RiotAccount) SaveToFile(path string) error {
-	data, err := json.MarshalIndent(r, "", "  ")
+func (p *Player) SaveToFile(path string) error {
+	data, err := json.MarshalIndent(p, "", "  ")
 	if err != nil {
 		return err
 	}
 	return os.WriteFile(path, data, 0644)
 }
 
-func (r *RiotAccount) LoadFromFile(path string) error {
+func (p *Player) LoadFromFile(path string) error {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return err
 	}
-	return json.Unmarshal(data, r)
+	return json.Unmarshal(data, p)
 }
 
-func (r *RiotAccount) GetSummonerInfoByName(api *RiotApi, gameName string, tagName string, cachePath string) Result[RiotAccount] {
-	// Check if file exists locally
-	if exists, _ := r.checkInfoAvailable(cachePath); exists {
-		err := r.LoadFromFile(cachePath)
+// GetSummonerInfoByName function with extensive debugging
+func (p *Player) GetSummonerInfoByName(api *RiotApi, gameName string, tagName string, cachePath string) Result[Player] {
+	fmt.Printf("\n--- GetSummonerInfoByName for %s#%s ---\n", gameName, tagName)
+
+	// Attempt to load from cache first
+	if exists, _ := p.checkInfoAvailable(cachePath); exists {
+		err := p.LoadFromFile(cachePath)
 		if err == nil {
-			return Result[RiotAccount]{Data: *r}
+			fmt.Println("Cache loaded successfully. Returning cached data.")
+			fmt.Printf("Cached Player data: %+v\n", *p)
+			return Result[Player]{Data: *p}
 		}
-		// If error reading file, fall through to API calls
+		// If error reading file (e.g., corrupt JSON), log and fall through to API calls
+		fmt.Printf("Error reading cache file %s: %v. Falling back to API.\n", cachePath, err)
 	}
+
 	var (
-		account     RiotAccount
-		accountInfo struct {
+		accountInfoAPI struct {
 			Puuid    string `json:"puuid"`
 			GameName string `json:"gameName"`
-			TagName  string `json:"tagLine"`
+			TagLine  string `json:"tagLine"`
 		}
-		rankInfos []RankInfo
+		rankInfos []RankInfo // Matches the array of objects from league/v4 API
 	)
 
-	// 1st call – get Puuid, GameName, TagName
+	fmt.Println("\n--- API Call 1: Account by Riot ID ---")
 	url1 := fmt.Sprintf("https://americas.api.riotgames.com/riot/account/v1/accounts/by-riot-id/%s/%s",
 		url.PathEscape(gameName), url.PathEscape(tagName))
+	fmt.Printf("URL 1: %s\n", url1)
 
 	body1, err := api.getRequestWithRetry(url1, api.apiKey)
 	if err != nil {
-		return Result[RiotAccount]{Err: err}
+		fmt.Printf("API Call 1 Failed: %v\n", err)
+		return Result[Player]{Err: fmt.Errorf("API call 1 (Account by Riot ID) failed for %s#%s: %w", gameName, tagName, err)}
 	}
+	fmt.Printf("API Call 1 Raw Body (first 200 chars): %s...\n", body1[:min(len(body1), 200)])
 
-	err = json.Unmarshal(body1, &accountInfo)
+	err = json.Unmarshal(body1, &accountInfoAPI)
 	if err != nil {
-		return Result[RiotAccount]{Err: err}
+		fmt.Printf("JSON Unmarshal 1 Failed: %v\n", err)
+		return Result[Player]{Err: fmt.Errorf("JSON unmarshal 1 (Account Info) failed for %s#%s: %w", gameName, tagName, err)}
 	}
+	fmt.Printf("API Call 1 Unmarshaled Data (accountInfoAPI): %+v\n", accountInfoAPI)
 
-	// Fill in the fields
-	account.Player.Puuid = accountInfo.Puuid
-	account.GameName = accountInfo.GameName
-	account.TagName = accountInfo.TagName
+	// Populate the receiver `p` with data from the first call
+	p.Puuid = accountInfoAPI.Puuid
+	p.GameName = accountInfoAPI.GameName
+	p.TagLine = accountInfoAPI.TagLine
+	fmt.Printf("Player after API Call 1 population: %+v\n", *p)
 
-	// 2nd call
-	url2 := fmt.Sprintf("https://na1.api.riotgames.com/lol/league/v4/entries/by-puuid/%s", url.PathEscape(account.Player.Puuid))
+	fmt.Println("\n--- API Call 2: League Entries by Puuid ---")
+	url2 := fmt.Sprintf("https://na1.api.riotgames.com/lol/league/v4/entries/by-puuid/%s", url.PathEscape(p.Puuid))
+	fmt.Printf("URL 2: %s\n", url2)
 
 	body2, err := api.getRequestWithRetry(url2, api.apiKey)
 	if err != nil {
-		return Result[RiotAccount]{Err: err}
+		fmt.Printf("API Call 2 Failed: %v\n", err)
+		return Result[Player]{Err: fmt.Errorf("API call 2 (League Entries by Puuid) failed for PUUID %s: %w", p.Puuid, err)}
 	}
+	fmt.Printf("API Call 2 Raw Body (first 200 chars): %s...\n", body2[:min(len(body2), 200)])
 
 	err = json.Unmarshal(body2, &rankInfos)
 	if err != nil {
-		return Result[RiotAccount]{Err: err}
+		fmt.Printf("JSON Unmarshal 2 Failed: %v\n", err)
+		return Result[Player]{Err: fmt.Errorf("JSON unmarshal 2 (League Entries) failed for PUUID %s: %w", p.Puuid, err)}
 	}
 
-	// Assign all rank infos
-	account.Player.RankType = make([]RankInfo, len(rankInfos))
-	copy(account.Player.RankType, rankInfos)
+	// Assign the unmarshaled rank infos to the receiver `p`
+	p.RankType = rankInfos
+	fmt.Printf("Player after API Call 2 population (RankType): %+v\n", *p)
 
-	// Compute scores
-	account.Player.computeRankScores()
+	// Compute scores on the receiver `p`
+	p.computeRankScores()
+	fmt.Printf("Player after computeRankScores: %+v\n", *p)
 
 	// Save locally
-	err = account.SaveToFile(cachePath)
+	err = p.SaveToFile(cachePath)
 	if err != nil {
-		// You can log or ignore this error depending on your use case
 		fmt.Println("Warning: failed to save summoner info locally:", err)
 	}
 
-	return Result[RiotAccount]{Data: account}
+	fmt.Printf("Final Player data to return: %+v\n", *p)
+	return Result[Player]{Data: *p}
+}
 
+func (p *Player) GetAccountInfoByPuuid(api *RiotApi, puuid string) (Player, error) {
+	urlName := fmt.Sprintf("https://americas.api.riotgames.com/riot/account/v1/accounts/by-puuid/%s", url.PathEscape(puuid))
+	body, err := api.getRequestWithRetry(urlName, api.apiKey)
+	if err != nil {
+		return Player{}, fmt.Errorf("API call to get account info by puuid %s failed: %w", puuid, err)
+	}
+	var accountInfo Player // Or var accountInfo Player
+	err = json.Unmarshal(body, &accountInfo)
+	if err != nil {
+		return Player{}, fmt.Errorf("error unmarshalling account info JSON for puuid %s: %w", puuid, err)
+	}
+	return accountInfo, nil
 }
